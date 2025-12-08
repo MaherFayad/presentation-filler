@@ -1,0 +1,1149 @@
+<!-- ui.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Nebula Slide Generator</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code&display=swap');
+
+        :root {
+            --transition-rule: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+            --transition-spring: 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+            /* 1rem is 16px by default */
+            --gap-l: 1.25rem;
+            --gap-m: 0.875rem;
+            --gap-s: 0.5rem;
+            --gap-xs: 0.25rem;
+
+            --font-size-m: 0.875rem;
+            --font-size-s: 0.75rem;
+            --font-size-xs: 0.5rem;
+
+            --radius-m: 0.625rem;
+            --radius-s: 0.375rem;
+
+            background-color: var(--figma-color-bg);
+            color: var(--figma-color-text);
+        }
+
+        :root.figma-light {
+            --vk-color-accent-themed: #0066FF;
+            --vk-color-accent-themed-hover: #0052CC;
+            --vk-color-accent-themed-darked: color-mix(in hsl, var(--vk-color-accent-themed) 100%, var(--figma-color-bg) 15%);
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+            --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+            --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+            --shadow-button: 0 2px 8px rgba(0, 102, 255, 0.25);
+        }
+
+        :root.figma-dark {
+            --vk-color-accent-themed: #4A90FF;
+            --vk-color-accent-themed-hover: #5EA0FF;
+            --vk-color-accent-themed-darked: color-mix(in hsl, var(--vk-color-accent-themed) 100%, var(--figma-color-bg) 15%);
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+            --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.6);
+            --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.8);
+            --shadow-button: 0 2px 12px rgba(74, 144, 255, 0.5);
+        }
+
+        * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            padding: 0;
+            margin: 0;
+            box-sizing: border-box;
+        }
+
+        *:focus-visible {
+            outline: 2px solid var(--figma-color-border-selected);
+            outline-offset: 2px;
+            border-radius: var(--radius-s);
+        }
+
+        /* Global scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--figma-color-bg-secondary);
+            border-radius: var(--radius-s);
+            margin: 2px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--figma-color-border);
+            border-radius: var(--radius-s);
+            border: 2px solid var(--figma-color-bg-secondary);
+            transition: background var(--transition-rule);
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--figma-color-border-strong);
+        }
+
+        ::-webkit-scrollbar-thumb:active {
+            background: var(--figma-color-icon);
+        }
+
+        .figma-dark ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: transparent;
+        }
+
+        .figma-dark ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .figma-dark ::-webkit-scrollbar-thumb:active {
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        .container {
+            width: 100%;
+            padding: var(--gap-l);
+            font-size: var(--font-size-m);
+            animation: fadeIn 300ms ease-out;
+        }
+
+        body {
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .container,
+        form {
+            display: flex;
+            flex-direction: column;
+            justify-content: start;
+            align-items: stretch;
+            gap: var(--gap-l);
+        }
+
+        .form-item > label {
+            display: block;
+            padding: 0 var(--gap-xs);
+            margin-bottom: var(--gap-s);
+            font-size: var(--font-size-s);
+            font-weight: 500;
+            color: var(--figma-color-text-secondary);
+            letter-spacing: 0.01em;
+        }
+
+        .library-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: var(--gap-s);
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 2px;
+        }
+
+        .library-card {
+            position: relative;
+            cursor: pointer;
+            padding: 1rem;
+            border: 1.5px solid var(--figma-color-border);
+            border-radius: var(--radius-m);
+            background-color: var(--figma-color-bg);
+            transition: all var(--transition-rule);
+            display: flex;
+            flex-direction: column;
+            gap: var(--gap-xs);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .library-card.loading {
+            cursor: default;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+            color: var(--figma-color-text-secondary);
+            font-size: var(--font-size-s);
+        }
+
+        .library-card input[type="radio"] {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .library-card:hover:not(.loading) {
+            border-color: var(--figma-color-border-strong);
+            background-color: var(--figma-color-bg-hover);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .library-card:has(input:checked) {
+            border-color: var(--vk-color-accent-themed);
+            background: linear-gradient(135deg, var(--figma-color-bg) 0%, var(--figma-color-bg-secondary) 100%);
+            box-shadow: 0 0 0 2px var(--vk-color-accent-themed), var(--shadow-button);
+        }
+
+        .library-card-title {
+            font-weight: 600;
+            font-size: var(--font-size-m);
+            color: var(--figma-color-text);
+            display: flex;
+            align-items: center;
+            gap: var(--gap-xs);
+        }
+
+        .library-card-meta {
+            font-size: var(--font-size-s);
+            color: var(--figma-color-text-secondary);
+            display: flex;
+            align-items: center;
+            gap: var(--gap-xs);
+        }
+
+        .library-card-icon {
+            font-size: 1rem;
+        }
+
+        .api-key-row {
+            display: grid;
+            grid-template-columns: 1fr auto auto;
+            gap: var(--gap-s);
+            align-items: center;
+        }
+
+        .api-key-row button {
+            padding: 0.75rem 1rem;
+            white-space: nowrap;
+        }
+
+        .key-status {
+            font-size: var(--font-size-s);
+            color: var(--figma-color-text-secondary);
+            margin-top: var(--gap-xs);
+        }
+
+        textarea,
+        input[type="number"],
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: var(--gap-m);
+            border-radius: var(--radius-m);
+            border: 1.5px solid var(--figma-color-border);
+            background-color: var(--figma-color-bg);
+            color: var(--figma-color-text);
+            font-size: var(--font-size-m);
+            transition: all var(--transition-rule);
+        }
+
+        textarea:focus,
+        input[type="number"]:focus,
+        input[type="text"]:focus,
+        input[type="password"]:focus {
+            border-color: var(--vk-color-accent-themed);
+            box-shadow: 0 0 0 2px color-mix(in hsl, var(--vk-color-accent-themed) 50%, transparent);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 6rem;
+        }
+
+        .segmented {
+            appearance: none;
+            border: none;
+
+            display: flex;
+            padding: 4px;
+            position: relative;
+
+            border-radius: var(--radius-m);
+            background-color: var(--figma-color-bg-secondary);
+            border: 1.5px solid var(--figma-color-border);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .segmented::before {
+            content: '';
+            position: absolute;
+            border-radius: calc(var(--radius-m) - 4px);
+            background-color: var(--figma-color-bg);
+            box-shadow: 0 2px 10px -2px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.1);
+            transition: all var(--transition-spring);
+            z-index: 0;
+            top: 4px;
+            bottom: 4px;
+            width: calc(25% - 4px);
+            left: 4px;
+        }
+
+        .segmented:has(input[value="selection"]:checked)::before {
+            transform: translateX(0);
+        }
+
+        .segmented:has(input[value="thisPage"]:checked)::before {
+            transform: translateX(calc(100% + 4px));
+        }
+
+        .segmented:has(input[value="allPages"]:checked)::before {
+            transform: translateX(calc(200% + 8px));
+        }
+
+        .segmented:has(input[value="entireFile"]:checked)::before {
+            transform: translateX(calc(300% + 12px));
+        }
+
+        .segmented input {
+            appearance: none;
+            position: absolute;
+
+            height: 100%;
+            width: 100%;
+
+            border-radius: calc(var(--radius-m) - 4px);
+            background-color: transparent;
+            box-shadow: none;
+            transition: transform var(--transition-rule);
+
+            pointer-events: all;
+            cursor: pointer;
+        }
+
+        .segmented label {
+            appearance: none;
+
+            position: relative;
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+            flex-grow: 1;
+
+            gap: var(--gap-xs);
+            padding: var(--gap-s) var(--gap-xs);
+            min-height: 2.25rem;
+
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .segmented input ~ span {
+            opacity: 0.5;
+            transition: opacity var(--transition-spring), transform var(--transition-spring);
+        }
+
+        .segmented input ~ span svg {
+            transition: transform var(--transition-spring);
+        }
+
+        .segmented input:checked ~ span {
+            opacity: 1;
+            transform: scale(1.02);
+        }
+
+        .segmented input:checked ~ span svg {
+            transform: scale(1.15) rotate(8deg);
+            animation: tabSwitch 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes tabSwitch {
+            0% {
+                transform: scale(1) rotate(0deg);
+            }
+            40% {
+                transform: scale(1.25) rotate(-5deg);
+            }
+            100% {
+                transform: scale(1.15) rotate(8deg);
+            }
+        }
+
+        .segmented input:active {
+            transform: scale(.96);
+        }
+
+        .segmented input:hover ~ span {
+            opacity: 0.75;
+        }
+
+        .segmented .tooltip {
+            position: absolute;
+            top: calc(-1 * var(--gap-s));
+            text-align: center;
+
+            width: max-content;
+            opacity: 0;
+
+            border-radius: var(--radius-s);
+            padding: var(--gap-s) var(--gap-m);
+
+            background-color: var(--figma-color-bg-inverse);
+            color: var(--figma-color-text-oninverse);
+            box-shadow: var(--shadow-lg);
+
+            transform: translateY(-90%);
+            transition: transform var(--transition-spring), opacity var(--transition-rule);
+            pointer-events: none;
+            font-size: var(--font-size-s);
+            font-weight: 500;
+        }
+
+        .segmented .tooltip span {
+            opacity: .65;
+            color: var(--figma-color-text-oninverse);
+            font-weight: 400;
+        }
+
+        .segmented input:hover ~ .tooltip,
+        .segmented input:focus-visible ~ .tooltip {
+            opacity: 1;
+            transform: translateY(-100%);
+        }
+
+        .checkbox {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: var(--gap-m);
+            padding: var(--gap-s) var(--gap-m);
+            user-select: none;
+            cursor: pointer;
+            border-radius: var(--radius-m);
+            transition: all var(--transition-rule);
+            border: 1.5px solid var(--figma-color-border);
+            background-color: var(--figma-color-bg);
+            position: relative;
+        }
+
+        .checkbox:hover {
+            background-color: var(--figma-color-bg-hover);
+            border-color: var(--figma-color-border-strong);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .checkbox input[type="checkbox"] {
+            appearance: none;
+            width: 1.25rem;
+            height: 1.25rem;
+            border: 2px solid var(--figma-color-border);
+            border-radius: var(--radius-s);
+            background-color: var(--figma-color-bg);
+            cursor: pointer;
+            position: relative;
+            transition: all var(--transition-spring);
+            flex-shrink: 0;
+        }
+
+        .checkbox input[type="checkbox"]:hover {
+            border-color: var(--figma-color-border-strong);
+            transform: scale(1.05);
+        }
+
+        .checkbox input[type="checkbox"]:checked {
+            background-color: var(--vk-color-accent-themed);
+            border-color: var(--vk-color-accent-themed);
+            animation: checkboxPop 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        @keyframes checkboxPop {
+            0% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.2);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .checkbox input[type="checkbox"]:checked::after {
+            content: '';
+            position: absolute;
+            left: 0.3rem;
+            top: 0.05rem;
+            width: 0.35rem;
+            height: 0.65rem;
+            border: solid white;
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+            animation: checkmarkDraw 300ms ease-out;
+        }
+
+        @keyframes checkmarkDraw {
+            0% {
+                height: 0;
+                width: 0;
+            }
+            50% {
+                height: 0.65rem;
+                width: 0;
+            }
+            100% {
+                height: 0.65rem;
+                width: 0.35rem;
+            }
+        }
+
+        .checkbox label {
+            cursor: pointer;
+            flex: 1;
+            font-size: var(--font-size-m);
+            font-weight: 500;
+            line-height: 1.4;
+        }
+
+        .buttons {
+            display: flex;
+            width: 100%;
+            gap: var(--gap-s);
+        }
+
+        button {
+            cursor: pointer;
+            padding: 1rem 1.25rem;
+
+            color: var(--figma-color-text);
+            border: none;
+            outline: none;
+            background: none;
+            border-radius: var(--radius-m);
+
+            user-select: none;
+            font-weight: 600;
+            font-size: var(--font-size-m);
+
+            letter-spacing: 0.01em;
+            transition: all var(--transition-rule);
+        }
+
+        button:hover {
+            background: var(--figma-color-bg-hover);
+            transform: translateY(-1px);
+        }
+
+        button:active {
+            transform: translateY(0) scale(0.98);
+        }
+
+        button.primary {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            width: 100%;
+            background: var(--vk-color-accent-themed);
+            transition: all var(--transition-rule);
+            color: white;
+            opacity: 1;
+            box-shadow: var(--shadow-button);
+            font-weight: 600;
+            position: relative;
+            overflow: hidden;
+        }
+
+        button.primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%);
+            opacity: 0;
+            transition: opacity var(--transition-rule);
+        }
+
+        button.primary .loader {
+            color: white;
+            display: none;
+            height: 1rem;
+            animation: spin 1s linear infinite;
+            transform: scaleX(-1);
+            z-index: 1;
+        }
+
+        button.primary .loader.show {
+            display: block;
+        }
+
+        button.primary:disabled {
+            pointer-events: none;
+            background-color: var(--vk-color-accent-themed-darked);
+            box-shadow: none;
+            opacity: 0.7;
+        }
+
+        @keyframes spin {
+            to {
+                transform: scaleX(-1) rotate(-360deg);
+            }
+        }
+
+        button.primary:hover {
+            background: var(--vk-color-accent-themed-hover);
+            transform: translateY(-2px);
+        }
+
+        .figma-light button.primary:hover {
+            box-shadow: 0 4px 16px rgba(0, 102, 255, 0.35);
+        }
+
+        button.primary:hover::before {
+            opacity: 1;
+        }
+
+        button.primary:active {
+            transform: translateY(0) scale(0.98);
+        }
+
+        button.primary span {
+            z-index: 1;
+        }
+
+        .figma-light button.primary {
+            box-shadow: 0 2px 12px rgba(0, 102, 255, 0.3);
+        }
+
+        .figma-dark button.primary {
+            box-shadow: 0 2px 16px rgba(74, 144, 255, 0.5);
+        }
+
+        .figma-dark button.primary:hover {
+            box-shadow: 0 4px 20px rgba(74, 144, 255, 0.6);
+        }
+
+        button.secondary {
+            padding-top: 0;
+            padding-bottom: 0;
+            border: 1.5px solid var(--figma-color-border);
+            background-color: var(--figma-color-bg);
+            transition: all var(--transition-rule);
+        }
+
+        button.secondary:hover {
+            border-color: var(--figma-color-border-strong);
+            background-color: var(--figma-color-bg-secondary);
+        }
+
+        button.cancel-button {
+            color: var(--figma-color-text-danger);
+            font-weight: 600;
+        }
+
+        button.cancel-button:hover {
+            background-color: var(--figma-color-bg-danger);
+            border-color: var(--figma-color-border-danger);
+        }
+
+        .errors {
+            display: none;
+            flex-direction: column;
+            gap: var(--gap-m);
+            margin-top: var(--gap-s);
+            user-select: none;
+            animation: slideDown 300ms ease-out;
+            background-color: var(--figma-color-bg-secondary);
+            padding: var(--gap-m);
+            border-radius: var(--radius-m);
+            border: 1.5px solid var(--figma-color-border);
+            box-shadow: var(--shadow-sm);
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-8px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .errors h2 {
+            font-size: var(--font-size-m);
+            font-weight: 600;
+            color: var(--figma-color-text-danger);
+            display: flex;
+            align-items: center;
+            gap: var(--gap-s);
+        }
+
+        .errors h3 {
+            font-size: var(--font-size-s);
+            font-weight: 500;
+            color: var(--figma-color-text-secondary);
+            margin-bottom: var(--gap-xs);
+        }
+
+        .errors ul {
+            display: none;
+            flex-direction: column;
+            gap: var(--gap-xs);
+        }
+
+        .errors li {
+            display: flex;
+            font-size: var(--font-size-s);
+            padding: var(--gap-s) var(--gap-m);
+            gap: var(--gap-s);
+            transition: all var(--transition-rule);
+            cursor: pointer;
+            border-radius: var(--radius-s);
+            background-color: var(--figma-color-bg);
+            border: 1px solid var(--figma-color-border);
+        }
+
+        .errors li:hover {
+            background: var(--figma-color-bg-hover);
+            border-color: var(--figma-color-border-strong);
+            transform: translateX(2px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .errors li:active {
+            transform: scale(0.98) translateX(2px);
+        }
+
+        .errors li p {
+            width: 100%;
+            line-height: 1.4;
+        }
+
+        .errors li div {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 1rem;
+            border-radius: var(--radius-s);
+            font-size: var(--font-size-xs);
+            max-width: 20%;
+        }
+
+        .errors li p,
+        .errors li div {
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .resizer {
+            position: fixed;
+            right: 0;
+            bottom: 0;
+            padding: 0.5rem;
+            z-index: 1;
+            cursor: nwse-resize;
+            transition: all var(--transition-rule);
+            border-radius: var(--radius-m) 0 0 0;
+        }
+
+        .resizer svg {
+            transition: all var(--transition-rule);
+            color: var(--figma-color-icon-tertiary);
+            opacity: 0.6;
+        }
+
+        .resizer:hover {
+            background-color: var(--figma-color-bg-hover);
+        }
+
+        .resizer:hover svg {
+            color: var(--figma-color-icon-secondary);
+            stroke-width: 2.5px;
+            opacity: 1;
+            transform: scale(1.1);
+        }
+
+        .resizer:active svg {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <form>
+        <div class="form-item">
+            <label for="userPrompt">Prompt / Description</label>
+            <textarea id="userPrompt" placeholder="Describe the slide deck you need"></textarea>
+        </div>
+
+        <div class="form-item api-key">
+            <label for="geminiKey">Gemini API Key</label>
+            <div class="api-key-row">
+                <input id="geminiKey" type="password" placeholder="Enter Gemini API key" autocomplete="off" />
+                <button type="button" class="secondary key-save">Save</button>
+                <button type="button" class="secondary key-clear">Clear</button>
+            </div>
+            <p class="key-status" aria-live="polite">No key saved</p>
+        </div>
+
+        <div class="form-item">
+            <label for="slideCount">Number of Slides</label>
+            <input id="slideCount" type="number" min="1" value="5" />
+        </div>
+
+        <div class="form-item">
+            <label for="scope">Scope</label>
+            <fieldset class="segmented scope">
+                <label>
+                    <input type="radio" name="scope" value="selection" checked />
+                    <span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 16 16">
+                            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.5 5.5L5 3l2.5 2.5m3.5-2.5l2.5 2.5L11 8M5 11l-2.5 2.5L5 16m6-2.5L13.5 16 16 13.5" opacity="0.5"/>
+                            <rect width="5" height="5" x="5.5" y="5.5" stroke="currentColor" stroke-width="1.5" rx="0.5"/>
+                        </svg>
+                    </span>
+                    <div class="tooltip">Selection</div>
+                </label>
+                <label>
+                    <input type="radio" name="scope" value="thisPage" />
+                    <span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 16 16">
+                            <rect width="9" height="12" x="3.5" y="2" stroke="currentColor" stroke-width="1.5" rx="1"/>
+                            <path stroke="currentColor" stroke-linecap="round" stroke-width="1.5" d="M5.5 5h5M5.5 8h5M5.5 11h3" opacity="0.5"/>
+                        </svg>
+                    </span>
+                    <div class="tooltip">This page</div>
+                </label>
+                <label>
+                    <input type="radio" name="scope" value="allPages" />
+                    <span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 16 16">
+                            <rect width="8" height="10" x="5" y="4" stroke="currentColor" stroke-width="1.5" rx="1"/>
+                            <path stroke="currentColor" stroke-linecap="round" stroke-width="1.5" d="M3.5 3.5v9c0 .55.45 1 1 1h7" opacity="0.5"/>
+                            <path stroke="currentColor" stroke-linecap="round" stroke-width="1.5" d="M2 2v9c0 .55.45 1 1 1h7" opacity="0.3"/>
+                        </svg>
+                    </span>
+                    <div class="tooltip">
+                        All pages<br /><span>Might be slow</span>
+                    </div>
+                </label>
+                <label>
+                    <input type="radio" name="scope" value="entireFile" />
+                    <span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 16 16">
+                            <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 2c-1.5 0-2.5 1-2.5 2.5 0 1 .5 1.8 1.2 2.3.4.3.6.7.6 1.2v1c0 .6.4 1 1 1h1.4c.6 0 1-.4 1-1v-1c0-.5.2-.9.6-1.2.7-.5 1.2-1.3 1.2-2.3C12.5 3 11.5 2 10 2h-2Z"/>
+                            <circle cx="5" cy="10" r="1.5" fill="currentColor" opacity="0.5"/>
+                            <circle cx="11" cy="12" r="1.2" fill="currentColor" opacity="0.4"/>
+                            <circle cx="3.5" cy="6" r="1" fill="currentColor" opacity="0.3"/>
+                        </svg>
+                    </span>
+                    <div class="tooltip">Entire file</div>
+                </label>
+            </fieldset>
+        </div>
+
+        <div class="checkbox">
+            <input type="checkbox" id="groupInSection" name="groupInSection" checked />
+            <label for="groupInSection">Group generated slides into a Section</label>
+        </div>
+
+        <div class="buttons">
+            <button type="submit" class="primary generate-button">
+                <span>Generate Slides</span>
+                <svg class="loader" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+                    <radialGradient id="a4" cx=".66" fx=".66" cy=".3125" fy=".3125" gradientTransform="scale(1.5)">
+                        <stop offset="0" stop-color="currentColor"></stop>
+                        <stop offset=".3" stop-color="currentColor" stop-opacity=".9"></stop>
+                        <stop offset=".6" stop-color="currentColor" stop-opacity=".6"></stop>
+                        <stop offset=".8" stop-color="currentColor" stop-opacity=".3"></stop>
+                        <stop offset="1" stop-color="currentColor" stop-opacity="0"></stop>
+                    </radialGradient>
+                    <circle transform-origin="center" fill="none" stroke="url(#a4)" stroke-width="30" stroke-linecap="round" stroke-dasharray="200 1000" stroke-dashoffset="0" cx="100" cy="100" r="70"></circle>
+                    <circle transform-origin="center" fill="none" opacity=".2" stroke="currentColor" stroke-width="30" stroke-linecap="round" cx="100" cy="100" r="70"></circle>
+                </svg>
+            </button>
+            <button type="button" class="secondary cancel-button" style="display: none;">✕ Cancel</button>
+        </div>
+
+        <div class="errors">
+            <h2>0 errors</h2>
+            <ul class="templates">
+                <h3>Templates</h3>
+            </ul>
+            <ul class="fonts">
+                <h3>Fonts</h3>
+            </ul>
+            <ul class="generation">
+                <h3>Generation</h3>
+            </ul>
+            <ul class="misc">
+                <h3>Other</h3>
+            </ul>
+        </div>
+    </form>
+
+    <div class="resizer">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg">
+            <path d="M5.84701 13.6252C7.71212 13.1254 9.41282 12.1435 10.7782 10.7782C12.1435 9.41282 13.1254 7.71212 13.6252 5.84701" />
+        </svg>
+    </div>
+</div>
+
+<script>
+    console.time('Query selecting')
+    const form = document.querySelector('form')
+    const errorsEl = document.querySelector('.errors')
+    const heading = errorsEl.querySelector('h2')
+    const submitText = form.querySelector('button[type=submit] span')
+    const submit = form.querySelector('button[type=submit]')
+    const loader = document.querySelector('.loader')
+    const resizer = document.querySelector('.resizer')
+    const cancelButton = document.querySelector('.cancel-button')
+    const scopeSelect = form.querySelector('.scope')
+    const keyInput = document.getElementById('geminiKey')
+    const keySaveBtn = document.querySelector('.key-save')
+    const keyClearBtn = document.querySelector('.key-clear')
+    const keyStatus = document.querySelector('.key-status')
+    console.timeEnd('Query selecting')
+
+    const lists = {
+        templates: errorsEl.querySelector('ul.templates'),
+        fonts: errorsEl.querySelector('ul.fonts'),
+        generation: errorsEl.querySelector('ul.generation'),
+        misc: errorsEl.querySelector('ul.misc'),
+    }
+
+    initResizer()
+
+    function autoResizeToFitContent() {
+        const container = document.querySelector('.container')
+        const contentHeight = container.scrollHeight
+        const width = 360
+        const height = Math.min(contentHeight, 650)
+        parent.postMessage({
+            pluginMessage: {
+                type: 'resize',
+                message: { width, height }
+            }
+        }, '*')
+    }
+
+    window.onmessage = async (event) => {
+        const type = event.data.pluginMessage.type
+        const message = event.data.pluginMessage.message
+        console.log(`Got ${type} message ↴`)
+        console.log(message)
+
+        switch (type) {
+            case 'scope':
+                defineScope(message.scope)
+                break
+            case 'finish':
+                finish(message.errors, message.summary)
+                break
+            case 'progress':
+                if (message?.status) submitText.innerText = message.status
+                break
+            case 'geminiKeyStatus':
+                updateKeyStatus(Boolean(message?.hasKey))
+                break
+            case 'errorReport':
+                try {
+                    await navigator.clipboard.writeText(message.markdown)
+                    console.log(`✅ Error report copied to clipboard!`)
+                    console.log(`Suggested filename: ${message.filename}`)
+                    console.log(`\n${message.markdown}`)
+                } catch (err) {
+                    console.error('Failed to copy to clipboard:', err)
+                    console.log('Error report markdown:')
+                    console.log(message.markdown)
+                }
+                break
+        }
+    }
+
+    keySaveBtn.onclick = () => {
+        parent.postMessage({
+            pluginMessage: {
+                type: 'saveGeminiKey',
+                message: { key: keyInput.value }
+            }
+        }, '*')
+        keyInput.value = ''
+    }
+
+    keyClearBtn.onclick = () => {
+        parent.postMessage({
+            pluginMessage: { type: 'clearGeminiKey' }
+        }, '*')
+    }
+
+    form.onsubmit = (event) => {
+        console.time('Submitting')
+        event.preventDefault()
+        clearErrors()
+
+        submit.disabled = true
+        submitText.innerText = 'Generating...'
+        loader.classList.add('show')
+
+        cancelButton.style.display = 'block'
+
+        const scope = scopeSelect.querySelector('input:checked').value
+
+        parent.postMessage({
+            pluginMessage: {
+                type: 'generateSlides',
+                message: {
+                    prompt: document.getElementById('userPrompt').value,
+                    slideCount: parseInt(document.getElementById('slideCount').value, 10),
+                    scope: scope,
+                    groupInSection: document.getElementById('groupInSection').checked
+                }
+            }
+        }, '*')
+
+        console.timeEnd('Submitting')
+    }
+
+    cancelButton.onclick = () => {
+        submitText.innerText = 'Cancelling...'
+        loader.classList.remove('show')
+        cancelButton.style.display = 'none'
+
+        parent.postMessage({
+            pluginMessage: { type: 'cancel' }
+        }, '*')
+    }
+
+    function defineScope(scope) {
+        if (['selection', 'thisPage', 'allPages', 'entireFile'].includes(scope))
+            scopeSelect.querySelector(`input[value=${scope}]`).checked = true
+    }
+
+    function finish(errors, summary) {
+        showErrors(errors)
+
+        submit.disabled = false
+        submitText.innerText = 'Generate Slides'
+        loader.classList.remove('show')
+
+        cancelButton.style.display = 'none'
+    }
+
+    function showErrors(errorsObj) {
+        const errorCount = Object.values(errorsObj).reduce((acc, err) => acc + err.length, 0)
+        if (errorCount === 0) return
+
+        heading.textContent = errorCount + ' error' + (errorCount === 1 ? '' : 's')
+        errorsEl.style.display = 'flex'
+
+        for (const [key, errors] of Object.entries(errorsObj)) {
+            if (errors.length > 0 && lists[key]) {
+                errors.forEach(error => {
+                    const text = document.createElement('p')
+                    text.textContent = error
+                    text.title = error
+                    const listItem = document.createElement('li')
+                    listItem.tabIndex = '0'
+                    listItem.appendChild(text)
+                    const icon = document.createElement('div')
+                    icon.innerHTML = '⚠️'
+                    listItem.appendChild(icon)
+                    lists[key].appendChild(listItem)
+                })
+                lists[key].style.display = 'flex'
+            }
+        }
+    }
+
+    function clearErrors() {
+        document.querySelectorAll('.errors ul').forEach(el => {
+            el.style.display = 'none'
+            el.querySelectorAll('li').forEach(li => li.remove())
+        })
+        errorsEl.style.display = 'none'
+    }
+
+    function initResizer() {
+        let width = window.innerWidth
+        let height = window.innerHeight
+        let pointerDownCursorPosition = null
+        resizer.addEventListener('pointerdown', function (event) {
+            pointerDownCursorPosition = {
+                x: event.offsetX,
+                y: event.offsetY
+            }
+            resizer.setPointerCapture(event.pointerId)
+        })
+        resizer.addEventListener('pointerup', function (event) {
+            pointerDownCursorPosition = null
+            resizer.releasePointerCapture(event.pointerId)
+            parent.postMessage({
+                pluginMessage: {
+                    type: 'saveSize',
+                    message: { width, height }
+                }
+            }, '*')
+        })
+        resizer.addEventListener('pointermove', function (event) {
+            if (pointerDownCursorPosition === null) return
+
+            width = Math.round(
+                event.clientX +
+                (resizer.offsetWidth - pointerDownCursorPosition.x)
+            )
+            height = Math.round(
+                event.clientY +
+                (resizer.offsetHeight - pointerDownCursorPosition.y)
+            )
+
+            parent.postMessage({
+                pluginMessage: {
+                    type: 'resize',
+                    message: { width, height }
+                }
+            }, '*')
+        })
+        resizer.addEventListener('dblclick', function () {
+            parent.postMessage({
+                pluginMessage: {
+                    type: 'defaultSize'
+                }
+            }, '*')
+        })
+    }
+
+    Object.prototype.groupBy = (arr, callback) => {
+        return arr.reduce((acc = {}, ...args) => {
+            const key = callback(...args)
+            acc[key] ??= []
+            acc[key].push(args[0])
+            return acc
+        }, {})
+    }
+
+    // Resize once after load to fit initial content
+    setTimeout(autoResizeToFitContent, 200)
+
+    // Request existing key status on load
+    parent.postMessage({ pluginMessage: { type: 'getGeminiKeyStatus' } }, '*')
+
+    function updateKeyStatus(hasKey) {
+        if (hasKey) {
+            keyStatus.textContent = 'Key saved securely (stored in Figma client storage)'
+            keyStatus.style.color = 'var(--figma-color-text-success, #8ef3c5)'
+        } else {
+            keyStatus.textContent = 'No key saved'
+            keyStatus.style.color = 'var(--figma-color-text-secondary)'
+        }
+    }
+</script>
+</body>
+</html>
