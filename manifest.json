@@ -9,7 +9,7 @@
   ],
   "networkAccess": {
     "allowedDomains": [
-      "https://generativelanguage.googleapis.com"
+      "https://openrouter.ai"
     ]
   }
 }

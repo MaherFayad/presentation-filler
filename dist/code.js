@@ -5,7 +5,7 @@ const STORAGE_KEYS = {
     scope: 'scope',
   };
   
-  const GEMINI_KEY = 'geminiApiKey';
+  const OPENROUTER_KEY = 'openrouterApiKey';
   const DEFAULT_UI = { width: 360, height: 520, minWidth: 280, minHeight: 200 };
   
   let cancelRequested = false;
@@ -30,8 +30,8 @@ const STORAGE_KEYS = {
       figma.ui.postMessage({ type: 'scope', message: { scope: savedScope } });
     }
   
-    const key = await figma.clientStorage.getAsync(GEMINI_KEY);
-    sendGeminiKeyStatus(Boolean(key));
+    const key = await figma.clientStorage.getAsync(OPENROUTER_KEY);
+    sendOpenRouterKeyStatus(Boolean(key));
   }
   
   figma.ui.onmessage = async (msg) => {
@@ -67,28 +67,28 @@ const STORAGE_KEYS = {
         break;
       }
   
-      case 'saveGeminiKey': {
-        await figma.clientStorage.setAsync(GEMINI_KEY, (msg.message.key || '').trim());
-        sendGeminiKeyStatus(true);
+      case 'saveOpenRouterKey': {
+        await figma.clientStorage.setAsync(OPENROUTER_KEY, (msg.message.key || '').trim());
+        sendOpenRouterKeyStatus(true);
         break;
       }
   
-      case 'clearGeminiKey': {
-        await figma.clientStorage.setAsync(GEMINI_KEY, '');
-        sendGeminiKeyStatus(false);
+      case 'clearOpenRouterKey': {
+        await figma.clientStorage.setAsync(OPENROUTER_KEY, '');
+        sendOpenRouterKeyStatus(false);
         break;
       }
   
-      case 'getGeminiKeyStatus': {
-        const key = await figma.clientStorage.getAsync(GEMINI_KEY);
-        sendGeminiKeyStatus(Boolean(key));
+      case 'getOpenRouterKeyStatus': {
+        const key = await figma.clientStorage.getAsync(OPENROUTER_KEY);
+        sendOpenRouterKeyStatus(Boolean(key));
         break;
       }
     }
   };
   
-  function sendGeminiKeyStatus(hasKey) {
-    figma.ui.postMessage({ type: 'geminiKeyStatus', message: { hasKey } });
+  function sendOpenRouterKeyStatus(hasKey) {
+    figma.ui.postMessage({ type: 'openrouterKeyStatus', message: { hasKey } });
   }
   
   function emptyErrors() {
@@ -234,15 +234,112 @@ const STORAGE_KEYS = {
     return Math.max(4, Math.round(length / 5));
   }
   
+  function estimateSlotChars(node) {
+    // Estimate based on text box dimensions if available
+    const currentLength = node.characters.length || 60;
+    // Use current length as baseline, with reasonable bounds
+    return Math.min(Math.max(currentLength, 20), 400);
+  }
+  
+  function getAverageCharWidth(fontSize, fontFamily) {
+    // Approximate character widths for common fonts (in pixels at 1px font size)
+    // These are rough averages for Latin characters
+    const fontWidthRatios = {
+      'Inter': 0.5,
+      'Arial': 0.5,
+      'Helvetica': 0.5,
+      'Roboto': 0.52,
+      'Open Sans': 0.53,
+      'Times New Roman': 0.45,
+      'Georgia': 0.48,
+      'Courier': 0.6,
+      'Courier New': 0.6,
+      'Verdana': 0.58,
+      'default': 0.52
+    };
+    
+    const ratio = fontWidthRatios[fontFamily] || fontWidthRatios['default'];
+    return fontSize * ratio;
+  }
+  
+  function estimateTextWidth(text, fontSize, fontFamily) {
+    if (!text) return 0;
+    const avgCharWidth = getAverageCharWidth(fontSize, fontFamily);
+    return text.length * avgCharWidth;
+  }
+  
+  function estimateMaxCharsForWidth(width, fontSize, fontFamily, lineHeight = 1.2) {
+    const avgCharWidth = getAverageCharWidth(fontSize, fontFamily);
+    if (avgCharWidth <= 0) return 100;
+    
+    const charsPerLine = Math.floor(width / avgCharWidth);
+    return Math.max(10, charsPerLine);
+  }
+  
+  function estimateMaxCharsForBox(width, height, fontSize, fontFamily, lineHeight = 1.2) {
+    if (!width || !height || !fontSize) return 100;
+    
+    const avgCharWidth = getAverageCharWidth(fontSize, fontFamily);
+    const effectiveLineHeight = fontSize * lineHeight;
+    
+    if (avgCharWidth <= 0 || effectiveLineHeight <= 0) return 100;
+    
+    const maxLines = Math.floor(height / effectiveLineHeight);
+    const charsPerLine = Math.floor(width / avgCharWidth);
+    
+    const totalChars = maxLines * charsPerLine;
+    
+    // Add 10% buffer for safety
+    return Math.max(10, Math.floor(totalChars * 0.9));
+  }
+  
+  function measureTextFit(text, slot) {
+    if (!text || !slot) return { fits: true, overflow: 0 };
+    
+    const width = slot.width || 200;
+    const height = slot.height || 50;
+    const fontSize = slot.fontSize || 12;
+    const fontFamily = slot.fontFamily || 'Inter';
+    
+    const maxChars = estimateMaxCharsForBox(width, height, fontSize, fontFamily);
+    const textLength = text.length;
+    
+    const fits = textLength <= maxChars;
+    const overflow = fits ? 0 : textLength - maxChars;
+    
+    return { fits, overflow, maxChars, textLength };
+  }
+  
   function buildSlots(textNodes) {
-    return textNodes.map((node, idx) => ({
-      nodeId: node.id,
-      name: node.name,
-      role: inferSlotRole(node.name, idx, textNodes.length, node.characters || ''),
-      estimatedChars: Math.min(Math.max(node.characters.length || 60, 20), 400),
-      estimatedWords: estimateSlotWords(node),
-      originalText: node.characters || '',
-    }));
+    return textNodes.map((node, idx) => {
+      // Handle mixed font sizes (figma.mixed is a Symbol)
+      const fontSize = (typeof node.fontSize === 'number') ? node.fontSize : 12;
+      const fontFamily = (node.fontName && typeof node.fontName === 'object' && node.fontName.family) 
+        ? node.fontName.family 
+        : 'Inter';
+      const fontStyle = (node.fontName && typeof node.fontName === 'object' && node.fontName.style)
+        ? node.fontName.style
+        : 'Regular';
+      const width = node.width || 200;
+      const height = node.height || 50;
+      
+      // Use font-aware estimation for character limit
+      const fontAwareCharLimit = estimateMaxCharsForBox(width, height, fontSize, fontFamily);
+      
+      return {
+        nodeId: node.id,
+        name: node.name,
+        role: inferSlotRole(node.name, idx, textNodes.length, node.characters || ''),
+        estimatedChars: Math.min(fontAwareCharLimit, 400),
+        estimatedWords: estimateSlotWords(node),
+        originalText: node.characters || '',
+        fontSize: fontSize,
+        fontFamily: fontFamily,
+        fontStyle: fontStyle,
+        width: width,
+        height: height,
+      };
+    });
   }
   
   function buildTemplateCatalog(scope) {
@@ -308,6 +405,7 @@ const STORAGE_KEYS = {
   }
   
   async function handleGenerateSlides(payload) {
+    console.clear();
     const errors = emptyErrors();
   
     const prompt =
@@ -358,7 +456,7 @@ const STORAGE_KEYS = {
   
     let plannedSlides = [];
     try {
-      plannedSlides = await planSlidesWithGemini(prompt, slideCount, catalog);
+      plannedSlides = await planSlidesWithDeepSeek(prompt, slideCount, catalog);
     } catch (err) {
       errors.generation.push(`Failed to plan slides: ${err.message}`);
       sendFinish(errors);
@@ -379,7 +477,7 @@ const STORAGE_KEYS = {
   
     let slides = [];
     try {
-      slides = await generateSlidesWithGemini(prompt, plannedSlides, catalog);
+      slides = await generateSlidesWithDeepSeek(prompt, plannedSlides, catalog);
     } catch (err) {
       errors.generation.push(`Failed to generate slides: ${err.message}`);
       sendFinish(errors);
@@ -390,6 +488,24 @@ const STORAGE_KEYS = {
       errors.generation.push('AI returned no slide content.');
       sendFinish(errors);
       return;
+    }
+    
+    // Refinement pass: Double-check and fix any text that's still too long
+    if (cancelRequested) {
+      sendFinish(errors, { status: 'Cancelled' });
+      return;
+    }
+    
+    figma.ui.postMessage({
+      type: 'progress',
+      message: { status: 'Refining text lengths...', progress: 85 }
+    });
+    
+    try {
+      slides = await refineTextLengths(slides, plannedSlides, catalog);
+    } catch (err) {
+      // If refinement fails, continue with original slides
+      console.warn('Text refinement failed:', err.message);
     }
   
     const created = [];
@@ -505,13 +621,39 @@ const STORAGE_KEYS = {
     if (subtitle) targets.subtitle = Math.round(subtitle);
     if (body) targets.body = Math.round(body);
     if (bullets) targets.bullets = Math.round(bullets);
+    
+    // Add character-based targets
+    const charTargets = {};
+    for (const slot of template.slots || []) {
+      let role = slot.role;
+      if (role === 'caption') role = 'subtitle';
+      if (!['title', 'subtitle', 'body', 'bullets'].includes(role)) continue;
+      if (slot.estimatedChars > 0) {
+        const existing = charTargets[role] || [];
+        existing.push(slot.estimatedChars);
+        charTargets[role] = existing;
+      }
+    }
+    
+    if (charTargets.title && charTargets.title.length) {
+      targets.titleChars = Math.round(avg(charTargets.title));
+    }
+    if (charTargets.subtitle && charTargets.subtitle.length) {
+      targets.subtitleChars = Math.round(avg(charTargets.subtitle));
+    }
+    if (charTargets.body && charTargets.body.length) {
+      targets.bodyChars = Math.round(avg(charTargets.body));
+    }
+    if (charTargets.bullets && charTargets.bullets.length) {
+      targets.bulletsChars = Math.round(avg(charTargets.bullets));
+    }
   
     return targets;
   }
   
-  async function planSlidesWithGemini(userPrompt, slideCount, catalog) {
-    const apiKey = await figma.clientStorage.getAsync(GEMINI_KEY);
-    if (!apiKey) throw new Error('Gemini API key not found in client storage (geminiApiKey).');
+  async function planSlidesWithDeepSeek(userPrompt, slideCount, catalog) {
+    const apiKey = await figma.clientStorage.getAsync(OPENROUTER_KEY);
+    if (!apiKey) throw new Error('OpenRouter API key not found in client storage (openrouterApiKey).');
 
     const minifiedTemplateSummary = catalog.map((t) => ({
       id: t.id,
@@ -530,53 +672,67 @@ const STORAGE_KEYS = {
     const detectedLanguage = await detectLanguage(userPrompt);
   
     const planPrompt = [
-      `Plan exactly ${slideCount} slides for a presentation in ${detectedLanguage}.`,
+      `You are an expert presentation planner. Plan exactly ${slideCount} slides for a presentation in ${detectedLanguage}.`,
       '',
-      'You will receive:',
-      '- Templates: objects with {id, isCover, hasTitle, hasSubtitle, hasBody, hasBullets, hasNumber, numberExample}.',
-      '- UserRequest: short text describing topic, audience, tone, structure hints.',
+      'Context:',
+      '- Templates: Available slide templates with their capabilities',
+      '- UserRequest: The user\'s presentation topic and requirements',
       '',
-      'Your job for EACH slide i (0-based):',
-      '- Choose a role (e.g. "cover","overview","content","example","summary","cta","toc","divider").',
-      '- Choose one templateId from Templates (do NOT invent ids).',
+      'Task:',
+      'For EACH slide (0-indexed), you must:',
+      '1. Assign a clear role (cover, overview, content, example, summary, cta, conclusion, etc.)',
+      '2. Select the most appropriate templateId from the available templates',
       '',
-      'Important rules:',
-      '- First slide MUST use a template where isCover === true.',
-      '- Use templates that match the role: cover templates for cover, bullets templates for agenda, etc.',
-      '- Do NOT worry about word counts; the plugin will derive wordTargets from template box sizes.',
-      `- Generate content in ${detectedLanguage} language.`,
+      'Critical Rules:',
+      '- First slide MUST use a template where isCover === true',
+      '- Match templates to roles: use bullet templates for lists, body templates for text-heavy content',
+      '- Each slide serves a clear purpose in the presentation flow',
+      '- Create a logical narrative structure',
+      `- All content will be in ${detectedLanguage} language`,
       '',
-      'Output (STRICT):',
-      '- Return ONLY a JSON array of length slideCount.',
-      '- No text before or after.',
-      '- item i corresponds to slide i.',
-      '- Each item: {',
-      '    "role": string,',
-      '    "templateId": string',
-      '  }',
+      'Output Format (STRICT):',
+      'Return ONLY a valid JSON array with exactly ${slideCount} elements.',
+      'No explanations, no markdown, no code blocks - just the JSON array.',
       '',
-      `Templates: ${JSON.stringify(minifiedTemplateSummary)}`,
-      `UserRequest: ${shortUserPrompt}`,
+      'Each array element must be:',
+      '{',
+      '  "role": string (the slide\'s purpose),',
+      '  "templateId": string (from available templates)',
+      '}',
+      '',
+      `Available Templates: ${JSON.stringify(minifiedTemplateSummary)}`,
+      '',
+      `User Requirements: ${shortUserPrompt}`,
+      '',
+      'Remember: Output ONLY the JSON array, nothing else.',
     ].join('\n');
   
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`;
+    const url = 'https://openrouter.ai/api/v1/chat/completions';
     const resp = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://figma.com',
+        'X-Title': 'Figma Presentation Filler Plugin'
+      },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: planPrompt }] }],
-        generationConfig: { temperature: 0.35 },
+        model: 'tngtech/deepseek-r1t2-chimera:free',
+        messages: [
+          { role: 'user', content: planPrompt }
+        ],
+        temperature: 0.35,
       }),
     });
   
     if (!resp.ok) {
       const text = await resp.text();
-      throw new Error(`Gemini plan request failed (${resp.status}): ${text}`);
+      throw new Error(`OpenRouter plan request failed (${resp.status}): ${text}`);
     }
   
     const data = await resp.json();
-    const textResponse = extractCandidateText(data);
-    if (!textResponse) throw new Error('Gemini planner response missing text content.');
+    const textResponse = extractOpenRouterText(data);
+    if (!textResponse) throw new Error('OpenRouter planner response missing text content.');
   
     const parsed = coercePlannerArray(textResponse);
     if (!parsed || !Array.isArray(parsed)) throw new Error('Unable to parse planner JSON.');
@@ -623,9 +779,202 @@ const STORAGE_KEYS = {
     return result;
   }
   
-  async function generateSlidesWithGemini(userPrompt, plannedSlides, catalog) {
-    const apiKey = await figma.clientStorage.getAsync(GEMINI_KEY);
-    if (!apiKey) throw new Error('Gemini API key not found in client storage (geminiApiKey).');
+  async function refineTextLengths(slides, plannedSlides, catalog) {
+    // Identify slides with text that's too long
+    const slidesToRefine = [];
+    
+    slides.forEach((slide, idx) => {
+      const plan = plannedSlides[idx] || {};
+      const template = catalog.find((t) => t.id === (slide.templateId || plan.templateId)) || null;
+      
+      if (!template) return;
+      
+      const issues = [];
+      const wordTargets = plan.wordTargets || {};
+      
+      // Check each field
+      const titleSlot = template.slots.find((s) => s.role === 'title');
+      const subtitleSlot = template.slots.find((s) => s.role === 'subtitle' || s.role === 'caption');
+      const bodySlot = template.slots.find((s) => s.role === 'body');
+      const bulletsSlot = template.slots.find((s) => s.role === 'bullets');
+      
+      if (slide.title && titleSlot) {
+        const targetChars = wordTargets.titleChars || titleSlot.estimatedChars;
+        if (slide.title.length > targetChars * 0.95) {
+          issues.push({
+            field: 'title',
+            currentLength: slide.title.length,
+            targetChars: Math.floor(targetChars * 0.85),
+            currentText: slide.title
+          });
+        }
+      }
+      
+      if (slide.subtitle && subtitleSlot) {
+        const targetChars = wordTargets.subtitleChars || subtitleSlot.estimatedChars;
+        if (slide.subtitle.length > targetChars * 0.95) {
+          issues.push({
+            field: 'subtitle',
+            currentLength: slide.subtitle.length,
+            targetChars: Math.floor(targetChars * 0.85),
+            currentText: slide.subtitle
+          });
+        }
+      }
+      
+      if (slide.body && bodySlot) {
+        const targetChars = wordTargets.bodyChars || bodySlot.estimatedChars;
+        if (slide.body.length > targetChars * 0.95) {
+          issues.push({
+            field: 'body',
+            currentLength: slide.body.length,
+            targetChars: Math.floor(targetChars * 0.85),
+            currentText: slide.body
+          });
+        }
+      }
+      
+      if (slide.bullets && Array.isArray(slide.bullets) && bulletsSlot) {
+        const targetChars = wordTargets.bulletsChars || bulletsSlot.estimatedChars;
+        slide.bullets.forEach((bullet, bIdx) => {
+          if (bullet.length > targetChars * 0.95) {
+            issues.push({
+              field: 'bullets',
+              bulletIndex: bIdx,
+              currentLength: bullet.length,
+              targetChars: Math.floor(targetChars * 0.85),
+              currentText: bullet
+            });
+          }
+        });
+      }
+      
+      if (issues.length > 0) {
+        slidesToRefine.push({
+          slideIndex: idx,
+          issues: issues,
+          slide: slide
+        });
+      }
+    });
+    
+    // If no slides need refinement, return as-is
+    if (slidesToRefine.length === 0) {
+      console.log('✓ All text lengths are acceptable');
+      return slides;
+    }
+    
+    console.log(`Refining ${slidesToRefine.length} slides with length issues`);
+    
+    // Ask AI to refine only the problematic fields
+    const apiKey = await figma.clientStorage.getAsync(OPENROUTER_KEY);
+    if (!apiKey) {
+      console.warn('No API key for refinement, using truncated text');
+      return slides;
+    }
+    
+    const refinementPrompt = [
+      'You are a text editor. Your ONLY job is to shorten text to fit exact character limits.',
+      '',
+      'Task: Rewrite the following text fields to be SHORTER while keeping the core message.',
+      '',
+      'Critical Rules:',
+      '- Each field has a targetChars that is the MAXIMUM allowed',
+      '- Your output MUST be SHORTER than the original',
+      '- Aim for 80-90% of targetChars, never exceed 95%',
+      '- Keep the meaning but be more concise',
+      '- Remove filler words, use shorter synonyms, simplify sentence structure',
+      '- No markdown, no formatting, plain text only',
+      '',
+      'Input format: Array of objects with { field, targetChars, currentLength, currentText }',
+      'Output format: Return ONLY a JSON array with same structure but "refinedText" instead of "currentText"',
+      '',
+      'Example:',
+      'Input: [{ "field": "title", "targetChars": 50, "currentLength": 65, "currentText": "This is a very long title that needs to be shortened significantly" }]',
+      'Output: [{ "field": "title", "targetChars": 50, "refinedText": "Long Title Needs Shortening" }]',
+      '',
+      'Now process these texts:',
+      JSON.stringify(slidesToRefine.map(sr => ({
+        slideIndex: sr.slideIndex,
+        issues: sr.issues.map(issue => ({
+          field: issue.field,
+          bulletIndex: issue.bulletIndex,
+          targetChars: issue.targetChars,
+          currentLength: issue.currentLength,
+          currentText: issue.currentText
+        }))
+      }))),
+      '',
+      'Return ONLY the JSON array with refinedText for each field:',
+    ].join('\n');
+    
+    const url = 'https://openrouter.ai/api/v1/chat/completions';
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://figma.com',
+        'X-Title': 'Figma Presentation Filler Plugin'
+      },
+      body: JSON.stringify({
+        model: 'tngtech/deepseek-r1t2-chimera:free',
+        messages: [
+          { role: 'user', content: refinementPrompt }
+        ],
+        temperature: 0.2,
+      }),
+    });
+    
+    if (!resp.ok) {
+      console.warn('Refinement request failed, using truncated text');
+      return slides;
+    }
+    
+    const data = await resp.json();
+    const textResponse = extractOpenRouterText(data);
+    if (!textResponse) {
+      console.warn('Refinement response missing text');
+      return slides;
+    }
+    
+    const refinements = tryParseJsonArray(textResponse);
+    if (!refinements || !Array.isArray(refinements)) {
+      console.warn('Could not parse refinement response');
+      return slides;
+    }
+    
+    // Apply refinements
+    refinements.forEach(refinement => {
+      const slideIdx = refinement.slideIndex;
+      if (slideIdx === undefined || !slides[slideIdx]) return;
+      
+      refinement.issues.forEach(issue => {
+        if (!issue.refinedText) return;
+        
+        const slide = slides[slideIdx];
+        
+        if (issue.field === 'title') {
+          slide.title = issue.refinedText;
+        } else if (issue.field === 'subtitle') {
+          slide.subtitle = issue.refinedText;
+        } else if (issue.field === 'body') {
+          slide.body = issue.refinedText;
+        } else if (issue.field === 'bullets' && issue.bulletIndex !== undefined) {
+          if (slide.bullets && Array.isArray(slide.bullets)) {
+            slide.bullets[issue.bulletIndex] = issue.refinedText;
+          }
+        }
+      });
+    });
+    
+    console.log('✓ Text refinement complete');
+    return slides;
+  }
+  
+  async function generateSlidesWithDeepSeek(userPrompt, plannedSlides, catalog) {
+    const apiKey = await figma.clientStorage.getAsync(OPENROUTER_KEY);
+    if (!apiKey) throw new Error('OpenRouter API key not found in client storage (openrouterApiKey).');
 
     const minifiedTemplateSummary = catalog.map((t) => ({
       id: t.id,
@@ -650,72 +999,89 @@ const STORAGE_KEYS = {
     const detectedLanguage = await detectLanguage(userPrompt);
   
     const generationPrompt = [
-      `You write final slide text for a planned deck in ${detectedLanguage}.`,
+      `You are an expert presentation content writer. Generate slide content in ${detectedLanguage}.`,
       '',
-      'You will receive:',
-      '- SlidePlan: array of {role, templateId, wordTargets}.',
-      '- Templates: basic info about what each template supports, including hasNumber and numberExample (keep numbers as-is).',
-      '- UserRequest: topic, audience, tone, language.',
+      'Context:',
+      '- SlidePlan: Pre-planned slides with roles, templates, and strict length targets',
+      '- Templates: Available template capabilities (fields they support)',
+      '- UserRequest: The presentation topic and style requirements',
       '',
-      'For EACH slide i in SlidePlan:',
-      '- Use the SAME templateId and role as in SlidePlan[i].',
-      '- Generate text fields that the template supports: title?, subtitle?, body?, bullets?.',
-      '- Do NOT add extra fields.',
-      '- If template hasNumber === true, DO NOT change that numeric slot; keep existing numberExample content.',
+      'Critical Length Requirements:',
+      '- Each field has wordTargets that MUST be respected',
+      '- For field f with target T: generate 0.7×T to 0.9×T words',
+      '- SHORTER is better than longer - text must fit in fixed text boxes',
+      '- Character limits are hard constraints - exceeding them breaks the design',
+      '- Think: "What\'s the minimum needed to convey this idea clearly?"',
       '',
-      'Length rules:',
-      '- For every field f in wordTargets, target = wordTargets[f].',
-      '- Words(f) should be roughly within 0.8×target and 1.1×target.',
-      '- A word = tokens separated by spaces; treat hyphenated words as one.',
-      '- If template does NOT support a field, omit it even if a target exists.',
+      'Content Generation Rules:',
+      `1. Language: ALL content in ${detectedLanguage}`,
+      '2. Format: Plain text only - no markdown, no emojis, no bullet symbols (•, -, *)',
+      '3. Bullets: Array of strings, each respecting the per-bullet word target',
+      '4. Numbers: If template hasNumber, do NOT generate content for number slots',
+      '5. Precision: Match slide role - covers are brief, content slides are focused',
       '',
-      'Content rules:',
-      `- Generate ALL content in ${detectedLanguage} language.`,
-      '- Plain text only. No Markdown, no emojis, no bullet characters ("-","•","*"), no numbering. (Template number slots stay unchanged).',
-      '- bullets MUST be an array of strings; each string is one bullet.',
-      '- Each bullet string should also respect the bullets wordTargets range (words per bullet).',
-      '- Respect role: cover/overview should be short; content slides can be denser; summary slides are concise.',
-      '- Follow language/tone from UserRequest consistently.',
+      'IMPORTANT - Fill ALL Fields:',
+      '- Generate content for EVERY field the template supports',
+      '- If template hasTitle, you MUST provide title',
+      '- If template hasSubtitle, you MUST provide subtitle',
+      '- If template hasBody, you MUST provide body',
+      '- If template hasBullets, you MUST provide bullets array',
+      '- DO NOT leave any supported field empty or undefined',
+      '- Use templateId and role from SlidePlan[i] for slide i',
       '',
-      'Output (STRICT):',
-      '- Return ONLY a JSON array of length SlidePlan.length.',
-      '- No text before or after.',
-      '- item i corresponds to slide i.',
-      '- Each item: {',
-      '    "templateId": string,',
-      '    "role": string,',
-      '    "title"?: string,',
-      '    "subtitle"?: string,',
-      '    "bullets"?: string[],',
-      '    "body"?: string',
-      '  }',
+      'Output Format (STRICT):',
+      'Return ONLY a valid JSON array.',
+      'No explanations, no thinking process, no markdown blocks - just the JSON.',
       '',
-      `SlidePlan: ${JSON.stringify(minifiedPlan)}`,
-      `Templates: ${JSON.stringify(minifiedTemplateSummary)}`,
-      `UserRequest: ${shortUserPrompt}`,
+      'Each array element:',
+      '{',
+      '  "templateId": string (from plan),',
+      '  "role": string (from plan),',
+      '  "title"?: string (if template supports),',
+      '  "subtitle"?: string (if template supports),',
+      '  "body"?: string (if template supports),',
+      '  "bullets"?: string[] (if template supports)',
+      '}',
+      '',
+      `Slide Plan with Targets: ${JSON.stringify(minifiedPlan)}`,
+      '',
+      `Template Capabilities: ${JSON.stringify(minifiedTemplateSummary)}`,
+      '',
+      `User Requirements: ${shortUserPrompt}`,
+      '',
+      'IMPORTANT: Be concise! Text boxes are limited. Aim for 70-90% of word targets, not 100-110%.',
+      'Output ONLY the JSON array now:',
     ].join('\n');
   
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`;
+    const url = 'https://openrouter.ai/api/v1/chat/completions';
     const resp = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://figma.com',
+        'X-Title': 'Figma Presentation Filler Plugin'
+      },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: generationPrompt }] }],
-        generationConfig: { temperature: 0.35 },
+        model: 'tngtech/deepseek-r1t2-chimera:free',
+        messages: [
+          { role: 'user', content: generationPrompt }
+        ],
+        temperature: 0.35,
       }),
     });
   
     if (!resp.ok) {
       const text = await resp.text();
-      throw new Error(`Gemini request failed (${resp.status}): ${text}`);
+      throw new Error(`OpenRouter request failed (${resp.status}): ${text}`);
     }
   
     const data = await resp.json();
-    const textResponse = extractCandidateText(data);
-    if (!textResponse) throw new Error('Gemini response missing text content.');
+    const textResponse = extractOpenRouterText(data);
+    if (!textResponse) throw new Error('OpenRouter response missing text content.');
   
     const parsed = tryParseJsonArray(textResponse);
-    if (!parsed || !Array.isArray(parsed)) throw new Error('Unable to parse slide JSON from Gemini response.');
+    if (!parsed || !Array.isArray(parsed)) throw new Error('Unable to parse slide JSON from OpenRouter response.');
   
     const slides = parsed.slice(0, plannedSlides.length);
     return enforceWordTargets(slides, plannedSlides, catalog);
@@ -771,12 +1137,11 @@ const STORAGE_KEYS = {
     return null;
   }
   
-  function extractCandidateText(data) {
-    if (!data || !data.candidates || !data.candidates.length) return '';
-    const first = data.candidates[0];
-    if (!first || !first.content || !first.content.parts || !first.content.parts.length) return '';
-    const part = first.content.parts[0];
-    return part && part.text ? part.text : '';
+  function extractOpenRouterText(data) {
+    if (!data || !data.choices || !data.choices.length) return '';
+    const first = data.choices[0];
+    if (!first || !first.message || !first.message.content) return '';
+    return first.message.content;
   }
   
   function countWords(text) {
@@ -787,13 +1152,129 @@ const STORAGE_KEYS = {
       .filter(Boolean).length;
   }
   
-  function clipToTarget(text, target, maxMultiplier = 1.05) {
+  function countChars(text) {
+    if (!text) return 0;
+    return text.length;
+  }
+  
+  function clipToTarget(text, target, maxMultiplier = 0.95) {
     if (!text) return text;
     if (!target || target <= 0) return text;
     const words = text.trim().split(/\s+/);
     const maxWords = Math.max(1, Math.round(target * maxMultiplier));
     if (words.length <= maxWords) return text;
     return words.slice(0, maxWords).join(' ');
+  }
+  
+  function clipToCharTarget(text, charTarget, maxMultiplier = 0.95) {
+    if (!text) return text;
+    if (!charTarget || charTarget <= 0) return text;
+    const maxChars = Math.max(1, Math.round(charTarget * maxMultiplier));
+    if (text.length <= maxChars) return text;
+    
+    // Clip at word boundary when possible
+    const words = text.trim().split(/\s+/);
+    let result = '';
+    for (const word of words) {
+      const testResult = result ? result + ' ' + word : word;
+      if (testResult.length > maxChars) {
+        break;
+      }
+      result = testResult;
+    }
+    
+    // If no words fit, just truncate to char limit
+    if (!result && text.length > 0) {
+      result = text.substring(0, maxChars);
+    }
+    
+    return result;
+  }
+  
+  function truncateToFit(text, slot, wordTarget, charTarget) {
+    if (!text) return text;
+    
+    let result = text;
+    
+    // Pass 1: Word-based truncation with buffer (0.9x multiplier)
+    if (wordTarget && wordTarget > 0) {
+      result = clipToTarget(result, wordTarget, 0.9);
+    }
+    
+    // Pass 2: Character-based truncation with buffer (0.9x multiplier)
+    if (charTarget && charTarget > 0) {
+      result = clipToCharTarget(result, charTarget, 0.9);
+    }
+    
+    // Pass 3: Font-aware width check with iterative removal
+    if (slot) {
+      let iterations = 0;
+      const maxIterations = 10;
+      
+      while (iterations < maxIterations) {
+        const fitCheck = measureTextFit(result, slot);
+        if (fitCheck.fits) break;
+        
+        // Remove words iteratively until it fits
+        const words = result.trim().split(/\s+/);
+        if (words.length <= 1) {
+          // Can't remove more words, truncate chars instead
+          const targetChars = fitCheck.maxChars;
+          result = result.substring(0, Math.max(10, targetChars));
+          break;
+        }
+        
+        // Remove last word
+        words.pop();
+        result = words.join(' ');
+        iterations++;
+      }
+    }
+    
+    return result;
+  }
+  
+  function validateTextFit(slide, template) {
+    const warnings = [];
+    
+    if (!template) return warnings;
+    
+    const titleSlot = template.slots.find((s) => s.role === 'title');
+    const subtitleSlot = template.slots.find((s) => s.role === 'subtitle' || s.role === 'caption');
+    const bodySlot = template.slots.find((s) => s.role === 'body');
+    const bulletsSlot = template.slots.find((s) => s.role === 'bullets');
+    
+    if (slide.title && titleSlot) {
+      const fitCheck = measureTextFit(slide.title, titleSlot);
+      if (!fitCheck.fits) {
+        warnings.push(`Title text exceeds slot by ${fitCheck.overflow} chars`);
+      }
+    }
+    
+    if (slide.subtitle && subtitleSlot) {
+      const fitCheck = measureTextFit(slide.subtitle, subtitleSlot);
+      if (!fitCheck.fits) {
+        warnings.push(`Subtitle text exceeds slot by ${fitCheck.overflow} chars`);
+      }
+    }
+    
+    if (slide.body && bodySlot) {
+      const fitCheck = measureTextFit(slide.body, bodySlot);
+      if (!fitCheck.fits) {
+        warnings.push(`Body text exceeds slot by ${fitCheck.overflow} chars`);
+      }
+    }
+    
+    if (slide.bullets && Array.isArray(slide.bullets) && bulletsSlot) {
+      slide.bullets.forEach((bullet, idx) => {
+        const fitCheck = measureTextFit(bullet, bulletsSlot);
+        if (!fitCheck.fits) {
+          warnings.push(`Bullet ${idx + 1} exceeds slot by ${fitCheck.overflow} chars`);
+        }
+      });
+    }
+    
+    return warnings;
   }
   
   function enforceWordTargets(slides, plannedSlides, catalog) {
@@ -849,20 +1330,39 @@ const STORAGE_KEYS = {
         wordTargets: wordTargets,
       };
   
-      if (trimmed.title) trimmed.title = clipToTarget(trimmed.title, titleTarget, 1.05);
-      if (trimmed.subtitle)
-        trimmed.subtitle = clipToTarget(trimmed.subtitle, subtitleTarget, 1.05);
-      if (trimmed.body) trimmed.body = clipToTarget(trimmed.body, bodyTarget, 1.05);
+      // Get character targets
+      const titleCharTarget = wordTargets.titleChars || (titleSlot ? titleSlot.estimatedChars : undefined);
+      const subtitleCharTarget = wordTargets.subtitleChars || (subtitleSlot ? subtitleSlot.estimatedChars : undefined);
+      const bodyCharTarget = wordTargets.bodyChars || (bodySlot ? bodySlot.estimatedChars : undefined);
+      const bulletsCharTarget = wordTargets.bulletsChars || (bulletsSlot ? bulletsSlot.estimatedChars : undefined);
+      
+      // Multi-pass truncation with font-aware checking
+      if (trimmed.title) {
+        trimmed.title = truncateToFit(trimmed.title, titleSlot, titleTarget, titleCharTarget);
+      }
+      if (trimmed.subtitle) {
+        trimmed.subtitle = truncateToFit(trimmed.subtitle, subtitleSlot, subtitleTarget, subtitleCharTarget);
+      }
+      if (trimmed.body) {
+        trimmed.body = truncateToFit(trimmed.body, bodySlot, bodyTarget, bodyCharTarget);
+      }
   
       if (Array.isArray(trimmed.bullets)) {
         const limitedBullets = bulletSlotCount
           ? trimmed.bullets.slice(0, bulletSlotCount)
           : trimmed.bullets;
-        trimmed.bullets = limitedBullets.map((b) =>
-          clipToTarget(b, bulletsTarget, 1.05),
-        );
+        trimmed.bullets = limitedBullets.map((b) => {
+          return truncateToFit(b, bulletsSlot, bulletsTarget, bulletsCharTarget);
+        });
       }
   
+      // Post-process validation
+      const validationWarnings = validateTextFit(trimmed, template);
+      if (validationWarnings.length > 0) {
+        // Log warnings but don't fail - truncation should have handled it
+        console.warn(`Slide ${idx} validation warnings:`, validationWarnings);
+      }
+      
       return trimmed;
     });
   }
@@ -925,15 +1425,23 @@ const STORAGE_KEYS = {
     for (let i = 0; i < textNodes.length; i++) {
       const node = textNodes[i];
       const slotMeta = slots.find((s) => s.nodeId === node.id) || slots[i] || null;
+      
       // Preserve numeric placeholders (e.g., page numbers / step numbers)
       if (slotMeta && slotMeta.role === 'number') {
         continue;
       }
+      
       const content = pickContentForSlot(mapping, slotMeta);
       try {
-        node.characters = content;
+        // Always set content, even if empty string - this clears old placeholder text
+        node.characters = content || '';
       } catch (err) {
-        // ignore per-node errors
+        // If setting content fails, try to at least clear it
+        try {
+          node.characters = '';
+        } catch (clearErr) {
+          // ignore per-node errors
+        }
       }
     }
   
@@ -944,30 +1452,41 @@ const STORAGE_KEYS = {
   
   function buildContentMap(slide, prompt) {
     return {
-      title: slide.title,
-      subtitle: slide.subtitle,
-      bullets: slide.bullets && slide.bullets.length ? slide.bullets.join('\n') : undefined,
-      body: slide.body,
-      fallback: prompt,
+      title: slide.title || null,
+      subtitle: slide.subtitle || null,
+      bullets: slide.bullets && slide.bullets.length ? slide.bullets.join('\n') : null,
+      body: slide.body || null,
+      fallback: null, // Don't use prompt as fallback - leave empty if no content
     };
   }
   
   function pickContentForSlot(mapping, slotMeta) {
-    if (!slotMeta) return mapping.title || mapping.body || mapping.fallback || '';
+    // Try to fill with appropriate content, but prefer empty over mismatched content
+    if (!slotMeta) {
+      // No slot metadata - try title first, then empty
+      return mapping.title || '';
+    }
+    
     switch (slotMeta.role) {
       case 'title':
-        return mapping.title || mapping.body || mapping.fallback || '';
+        // Only use title field, don't fallback to other content
+        return mapping.title || '';
       case 'subtitle':
       case 'caption':
-        return mapping.subtitle || mapping.body || mapping.fallback || '';
+        // Only use subtitle field, don't fallback to other content
+        return mapping.subtitle || '';
       case 'bullets':
-        return mapping.bullets || mapping.body || mapping.subtitle || mapping.fallback || '';
+        // Only use bullets field, don't fallback to other content
+        return mapping.bullets || '';
       case 'body':
-        return (
-          mapping.body || mapping.bullets || mapping.subtitle || mapping.title || mapping.fallback || ''
-        );
+        // Body can fallback to bullets if no body content
+        return mapping.body || mapping.bullets || '';
+      case 'misc':
+        // Misc slots try body or subtitle, but prefer empty over title
+        return mapping.body || mapping.subtitle || '';
       default:
-        return mapping.body || mapping.title || mapping.fallback || '';
+        // Unknown role - try to intelligently fill
+        return mapping.body || mapping.title || '';
     }
   }
   

@@ -783,9 +783,9 @@
         </div>
 
         <div class="form-item api-key">
-            <label for="geminiKey">Gemini API Key</label>
+            <label for="openrouterKey">OpenRouter API Key</label>
             <div class="api-key-row">
-                <input id="geminiKey" type="password" placeholder="Enter Gemini API key" autocomplete="off" />
+                <input id="openrouterKey" type="password" placeholder="Enter OpenRouter API key" autocomplete="off" />
                 <button type="button" class="secondary key-save">Save</button>
                 <button type="button" class="secondary key-clear">Clear</button>
             </div>
@@ -906,7 +906,7 @@
     const resizer = document.querySelector('.resizer')
     const cancelButton = document.querySelector('.cancel-button')
     const scopeSelect = form.querySelector('.scope')
-    const keyInput = document.getElementById('geminiKey')
+    const keyInput = document.getElementById('openrouterKey')
     const keySaveBtn = document.querySelector('.key-save')
     const keyClearBtn = document.querySelector('.key-clear')
     const keyStatus = document.querySelector('.key-status')
@@ -950,7 +950,7 @@
             case 'progress':
                 if (message?.status) submitText.innerText = message.status
                 break
-            case 'geminiKeyStatus':
+            case 'openrouterKeyStatus':
                 updateKeyStatus(Boolean(message?.hasKey))
                 break
             case 'errorReport':
@@ -971,7 +971,7 @@
     keySaveBtn.onclick = () => {
         parent.postMessage({
             pluginMessage: {
-                type: 'saveGeminiKey',
+                type: 'saveOpenRouterKey',
                 message: { key: keyInput.value }
             }
         }, '*')
@@ -980,7 +980,7 @@
 
     keyClearBtn.onclick = () => {
         parent.postMessage({
-            pluginMessage: { type: 'clearGeminiKey' }
+            pluginMessage: { type: 'clearOpenRouterKey' }
         }, '*')
     }
 
@@ -1133,7 +1133,7 @@
     setTimeout(autoResizeToFitContent, 200)
 
     // Request existing key status on load
-    parent.postMessage({ pluginMessage: { type: 'getGeminiKeyStatus' } }, '*')
+    parent.postMessage({ pluginMessage: { type: 'getOpenRouterKeyStatus' } }, '*')
 
     function updateKeyStatus(hasKey) {
         if (hasKey) {
