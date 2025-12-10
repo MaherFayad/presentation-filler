@@ -217,16 +217,54 @@
             font-size: 1rem;
         }
 
-        .api-key-row {
-            display: grid;
-            grid-template-columns: 1fr auto auto;
-            gap: var(--gap-s);
+        .input-with-button {
+            position: relative;
+            display: flex;
             align-items: center;
         }
 
-        .api-key-row button {
-            padding: 0.75rem 1rem;
-            white-space: nowrap;
+        .input-with-button input {
+            padding-right: 3rem; /* Make space for the button */
+        }
+
+        .input-save-btn {
+            position: absolute;
+            right: 0.5rem;
+            top: 50%;
+            transform: translateY(-50%);
+            padding: 0.5rem;
+            min-height: 2rem;
+            min-width: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: var(--radius-s);
+            background: var(--vk-color-accent-themed);
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: all var(--transition-rule);
+            opacity: 0.9;
+        }
+
+        .input-save-btn:hover {
+            opacity: 1;
+            transform: translateY(-50%) scale(1.05);
+            background: var(--vk-color-accent-themed-hover);
+        }
+
+        .input-save-btn:active {
+            transform: translateY(-50%) scale(0.95);
+        }
+
+        .input-save-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .input-save-btn svg {
+            display: block;
         }
 
         .key-status {
@@ -784,10 +822,13 @@
 
         <div class="form-item api-key">
             <label for="openrouterKey">OpenRouter API Key</label>
-            <div class="api-key-row">
+            <div class="input-with-button">
                 <input id="openrouterKey" type="password" placeholder="Enter OpenRouter API key" autocomplete="off" />
-                <button type="button" class="secondary key-save">Save</button>
-                <button type="button" class="secondary key-clear">Clear</button>
+                <button type="button" class="input-save-btn" title="Save API Key" disabled>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M13 5.5L6.5 12L3 8.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
             </div>
             <p class="key-status" aria-live="polite">No key saved</p>
         </div>
@@ -907,8 +948,7 @@
     const cancelButton = document.querySelector('.cancel-button')
     const scopeSelect = form.querySelector('.scope')
     const keyInput = document.getElementById('openrouterKey')
-    const keySaveBtn = document.querySelector('.key-save')
-    const keyClearBtn = document.querySelector('.key-clear')
+    const keySaveBtn = document.querySelector('.input-save-btn')
     const keyStatus = document.querySelector('.key-status')
     console.timeEnd('Query selecting')
 
@@ -968,21 +1008,42 @@
         }
     }
 
+    // Enable/disable save button based on input content
+    keyInput.addEventListener('input', () => {
+        keySaveBtn.disabled = keyInput.value.trim().length === 0
+    })
+    
+    // Manual save button
     keySaveBtn.onclick = () => {
-        parent.postMessage({
-            pluginMessage: {
-                type: 'saveOpenRouterKey',
-                message: { key: keyInput.value }
-            }
-        }, '*')
-        keyInput.value = ''
+        const keyValue = keyInput.value.trim()
+        if (keyValue.length > 0) {
+            parent.postMessage({
+                pluginMessage: {
+                    type: 'saveOpenRouterKey',
+                    message: { key: keyValue }
+                }
+            }, '*')
+            
+            // Visual feedback
+            keySaveBtn.style.animation = 'checkboxPop 400ms cubic-bezier(0.34, 1.56, 0.64, 1)'
+            setTimeout(() => {
+                keySaveBtn.style.animation = ''
+            }, 400)
+        } else {
+            // If empty, clear the saved key
+            parent.postMessage({
+                pluginMessage: { type: 'clearOpenRouterKey' }
+            }, '*')
+        }
     }
-
-    keyClearBtn.onclick = () => {
-        parent.postMessage({
-            pluginMessage: { type: 'clearOpenRouterKey' }
-        }, '*')
-    }
+    
+    // Also allow Enter key to save
+    keyInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !keySaveBtn.disabled) {
+            e.preventDefault()
+            keySaveBtn.click()
+        }
+    })
 
     form.onsubmit = (event) => {
         console.time('Submitting')
@@ -1137,11 +1198,15 @@
 
     function updateKeyStatus(hasKey) {
         if (hasKey) {
-            keyStatus.textContent = 'Key saved securely (stored in Figma client storage)'
+            keyStatus.textContent = '✓ Key saved securely'
             keyStatus.style.color = 'var(--figma-color-text-success, #8ef3c5)'
+            // Clear the input field when key is saved (for security)
+            keyInput.value = ''
+            keyInput.placeholder = 'Key saved securely'
         } else {
             keyStatus.textContent = 'No key saved'
             keyStatus.style.color = 'var(--figma-color-text-secondary)'
+            keyInput.placeholder = 'Enter OpenRouter API key'
         }
     }
 </script>

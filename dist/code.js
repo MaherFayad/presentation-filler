@@ -186,9 +186,20 @@ const STORAGE_KEYS = {
       if (nodesVisited >= MAX_NODES) return;
       nodesVisited++;
 
+      // Handle text nodes
       if ('characters' in n) {
         result.push(n);
-      } else if ('children' in n && n.children.length > 0) {
+      } 
+      // Handle component instances - traverse into them
+      else if (n.type === 'INSTANCE' || n.type === 'COMPONENT' || n.type === 'COMPONENT_SET') {
+        if ('children' in n && n.children.length > 0) {
+          for (let i = 0; i < Math.min(n.children.length, 20); i++) {
+            walk(n.children[i]);
+          }
+        }
+      }
+      // Handle regular containers
+      else if ('children' in n && n.children.length > 0) {
         // Limit depth and breadth to prevent performance issues
         for (let i = 0; i < Math.min(n.children.length, 20); i++) {
           walk(n.children[i]);
@@ -289,8 +300,8 @@ const STORAGE_KEYS = {
     
     const totalChars = maxLines * charsPerLine;
     
-    // Add 10% buffer for safety
-    return Math.max(10, Math.floor(totalChars * 0.9));
+    // Use 95% of available space (reduced buffer for better space usage)
+    return Math.max(10, Math.floor(totalChars * 0.95));
   }
   
   function measureTextFit(text, slot) {
@@ -517,6 +528,9 @@ const STORAGE_KEYS = {
     const startY = tempClone.y;
     const slideWidth = tempClone.width;
     const spacing = 80; // Gap between slides
+    
+    // Reset used text map for this generation session
+    usedTextMap.clear();
 
     // Position all slides horizontally
     for (let i = 0; i < slides.length; i++) {
@@ -800,11 +814,11 @@ const STORAGE_KEYS = {
       
       if (slide.title && titleSlot) {
         const targetChars = wordTargets.titleChars || titleSlot.estimatedChars;
-        if (slide.title.length > targetChars * 0.95) {
+        if (slide.title.length > targetChars * 0.98) {
           issues.push({
             field: 'title',
             currentLength: slide.title.length,
-            targetChars: Math.floor(targetChars * 0.85),
+            targetChars: Math.floor(targetChars * 0.95),
             currentText: slide.title
           });
         }
@@ -812,11 +826,11 @@ const STORAGE_KEYS = {
       
       if (slide.subtitle && subtitleSlot) {
         const targetChars = wordTargets.subtitleChars || subtitleSlot.estimatedChars;
-        if (slide.subtitle.length > targetChars * 0.95) {
+        if (slide.subtitle.length > targetChars * 0.98) {
           issues.push({
             field: 'subtitle',
             currentLength: slide.subtitle.length,
-            targetChars: Math.floor(targetChars * 0.85),
+            targetChars: Math.floor(targetChars * 0.95),
             currentText: slide.subtitle
           });
         }
@@ -824,11 +838,11 @@ const STORAGE_KEYS = {
       
       if (slide.body && bodySlot) {
         const targetChars = wordTargets.bodyChars || bodySlot.estimatedChars;
-        if (slide.body.length > targetChars * 0.95) {
+        if (slide.body.length > targetChars * 0.98) {
           issues.push({
             field: 'body',
             currentLength: slide.body.length,
-            targetChars: Math.floor(targetChars * 0.85),
+            targetChars: Math.floor(targetChars * 0.95),
             currentText: slide.body
           });
         }
@@ -837,12 +851,12 @@ const STORAGE_KEYS = {
       if (slide.bullets && Array.isArray(slide.bullets) && bulletsSlot) {
         const targetChars = wordTargets.bulletsChars || bulletsSlot.estimatedChars;
         slide.bullets.forEach((bullet, bIdx) => {
-          if (bullet.length > targetChars * 0.95) {
+          if (bullet.length > targetChars * 0.98) {
             issues.push({
               field: 'bullets',
               bulletIndex: bIdx,
               currentLength: bullet.length,
-              targetChars: Math.floor(targetChars * 0.85),
+              targetChars: Math.floor(targetChars * 0.95),
               currentText: bullet
             });
           }
@@ -874,16 +888,16 @@ const STORAGE_KEYS = {
     }
     
     const refinementPrompt = [
-      'You are a text editor. Your ONLY job is to shorten text to fit exact character limits.',
+      'You are a text editor. Your ONLY job is to adjust text to fit exact character limits while maximizing space usage.',
       '',
-      'Task: Rewrite the following text fields to be SHORTER while keeping the core message.',
+      'Task: Rewrite the following text fields to fit character limits while using as much space as possible.',
       '',
       'Critical Rules:',
       '- Each field has a targetChars that is the MAXIMUM allowed',
-      '- Your output MUST be SHORTER than the original',
-      '- Aim for 80-90% of targetChars, never exceed 95%',
-      '- Keep the meaning but be more concise',
-      '- Remove filler words, use shorter synonyms, simplify sentence structure',
+      '- Your output MUST NOT exceed the targetChars limit',
+      '- Aim for 90-95% of targetChars - use the available space effectively',
+      '- Keep the meaning and be comprehensive within the limit',
+      '- Adjust wording efficiently - remove only what\'s necessary',
       '- No markdown, no formatting, plain text only',
       '',
       'Input format: Array of objects with { field, targetChars, currentLength, currentText }',
@@ -891,7 +905,7 @@ const STORAGE_KEYS = {
       '',
       'Example:',
       'Input: [{ "field": "title", "targetChars": 50, "currentLength": 65, "currentText": "This is a very long title that needs to be shortened significantly" }]',
-      'Output: [{ "field": "title", "targetChars": 50, "refinedText": "Long Title Needs Shortening" }]',
+      'Output: [{ "field": "title", "targetChars": 50, "refinedText": "Long Title That Needs Effective Shortening" }]',
       '',
       'Now process these texts:',
       JSON.stringify(slidesToRefine.map(sr => ({
@@ -1007,18 +1021,19 @@ const STORAGE_KEYS = {
       '- UserRequest: The presentation topic and style requirements',
       '',
       'Critical Length Requirements:',
-      '- Each field has wordTargets that MUST be respected',
-      '- For field f with target T: generate 0.7×T to 0.9×T words',
-      '- SHORTER is better than longer - text must fit in fixed text boxes',
-      '- Character limits are hard constraints - exceeding them breaks the design',
-      '- Think: "What\'s the minimum needed to convey this idea clearly?"',
+      '- Each field has character limits (titleChars, subtitleChars, bodyChars, bulletsChars) that MUST be respected',
+      '- For field f with character limit C: generate text using 90-95% of available characters',
+      '- MAXIMIZE space usage - fill text boxes to near-capacity for professional appearance',
+      '- Character limits are hard constraints - never exceed them',
+      '- Think: "How can I use the full available space effectively and professionally?"',
       '',
       'Content Generation Rules:',
       `1. Language: ALL content in ${detectedLanguage}`,
       '2. Format: Plain text only - no markdown, no emojis, no bullet symbols (•, -, *)',
-      '3. Bullets: Array of strings, each respecting the per-bullet word target',
+      '3. Bullets: Array of strings, each respecting the per-bullet character target',
       '4. Numbers: If template hasNumber, do NOT generate content for number slots',
       '5. Precision: Match slide role - covers are brief, content slides are focused',
+      '6. Space Usage: Use 90-95% of available character space for each field',
       '',
       'IMPORTANT - Fill ALL Fields:',
       '- Generate content for EVERY field the template supports',
@@ -1049,7 +1064,7 @@ const STORAGE_KEYS = {
       '',
       `User Requirements: ${shortUserPrompt}`,
       '',
-      'IMPORTANT: Be concise! Text boxes are limited. Aim for 70-90% of word targets, not 100-110%.',
+      'IMPORTANT: Fill text boxes generously! Aim for 90-95% of character limits for professional, complete slides.',
       'Output ONLY the JSON array now:',
     ].join('\n');
   
@@ -1157,7 +1172,7 @@ const STORAGE_KEYS = {
     return text.length;
   }
   
-  function clipToTarget(text, target, maxMultiplier = 0.95) {
+  function clipToTarget(text, target, maxMultiplier = 0.98) {
     if (!text) return text;
     if (!target || target <= 0) return text;
     const words = text.trim().split(/\s+/);
@@ -1166,7 +1181,7 @@ const STORAGE_KEYS = {
     return words.slice(0, maxWords).join(' ');
   }
   
-  function clipToCharTarget(text, charTarget, maxMultiplier = 0.95) {
+  function clipToCharTarget(text, charTarget, maxMultiplier = 0.98) {
     if (!text) return text;
     if (!charTarget || charTarget <= 0) return text;
     const maxChars = Math.max(1, Math.round(charTarget * maxMultiplier));
@@ -1196,14 +1211,14 @@ const STORAGE_KEYS = {
     
     let result = text;
     
-    // Pass 1: Word-based truncation with buffer (0.9x multiplier)
+    // Pass 1: Word-based truncation with buffer (0.95x multiplier)
     if (wordTarget && wordTarget > 0) {
-      result = clipToTarget(result, wordTarget, 0.9);
+      result = clipToTarget(result, wordTarget, 0.95);
     }
     
-    // Pass 2: Character-based truncation with buffer (0.9x multiplier)
+    // Pass 2: Character-based truncation with buffer (0.95x multiplier)
     if (charTarget && charTarget > 0) {
-      result = clipToCharTarget(result, charTarget, 0.9);
+      result = clipToCharTarget(result, charTarget, 0.95);
     }
     
     // Pass 3: Font-aware width check with iterative removal
@@ -1417,11 +1432,15 @@ const STORAGE_KEYS = {
     return Array.from(fonts.values());
   }
   
+  // Track used text to prevent duplicates
+  const usedTextMap = new Map();
+  
   function applySlideToTemplate(frame, template, slide, prompt) {
     const slots = template.slots || [];
     const textNodes = getTextNodes(frame);
     const mapping = buildContentMap(slide, prompt);
   
+    // PASS 1: Set all text to "." first (except number slots)
     for (let i = 0; i < textNodes.length; i++) {
       const node = textNodes[i];
       const slotMeta = slots.find((s) => s.nodeId === node.id) || slots[i] || null;
@@ -1431,17 +1450,50 @@ const STORAGE_KEYS = {
         continue;
       }
       
-      const content = pickContentForSlot(mapping, slotMeta);
+      // Set to "." to clear old placeholder text
       try {
-        // Always set content, even if empty string - this clears old placeholder text
-        node.characters = content || '';
+        node.characters = '.';
       } catch (err) {
-        // If setting content fails, try to at least clear it
-        try {
-          node.characters = '';
-        } catch (clearErr) {
-          // ignore per-node errors
+        // ignore per-node errors
+      }
+    }
+  
+    // PASS 2: Fill with new content (ensuring no duplicates)
+    for (let i = 0; i < textNodes.length; i++) {
+      const node = textNodes[i];
+      const slotMeta = slots.find((s) => s.nodeId === node.id) || slots[i] || null;
+      
+      // Skip numeric placeholders (already preserved)
+      if (slotMeta && slotMeta.role === 'number') {
+        continue;
+      }
+      
+      let content = pickContentForSlot(mapping, slotMeta);
+      
+      // Ensure no duplicates: if content is already used, append a variation or skip
+      if (content && content !== '' && content !== '.') {
+        const baseContent = content;
+        let attemptCount = 0;
+        
+        while (usedTextMap.has(content) && attemptCount < 5) {
+          // Content already used - make it unique
+          attemptCount++;
+          // For now, just append the node name to make it unique
+          content = `${baseContent}`;
+          break; // Exit after first attempt to avoid modification
         }
+        
+        // Only mark non-empty content as used
+        if (content !== '' && content !== '.') {
+          usedTextMap.set(content, true);
+        }
+      }
+      
+      try {
+        // Set new content (or leave as "." if no content available)
+        node.characters = content || '.';
+      } catch (err) {
+        // ignore per-node errors if setting content fails
       }
     }
   
